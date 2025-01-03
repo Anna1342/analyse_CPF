@@ -1,0 +1,176 @@
+
+J'installe tous les packages necéssaires pour utiliser les fonctions que je veux dans mon code ...
+```{r}
+#install.packages("ggplot2")
+#install.packages("dplyr")
+#install.packages("tidyr")
+#install.packages("tidyverse")
+#install.packages("lubridate")
+#install.packages("stringr")
+```
+
+... et j'appelle chaque package pour l'utiliser avec la fonction library()
+```{r}
+library(stringr)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+```
+
+On créé deux jeu de données avec des nombres générés aléatoirement grâce à la fonction rnorm()
+```{r}
+df1 <- data.frame(a= rnorm(9, mean=2, sd=10), b=rnorm(9, mean=1, sd=5), c=rnorm(9, mean=2, sd=3))
+
+df2 <- data.frame(a= rnorm(9, mean=1, sd=6), b=rnorm(9, mean=2, sd=2), c=rnorm(9, mean=4, sd=10))
+
+df1[1, 1]= NaN # on change la valeur manquante de la première ligne, première colonne, en NaN...
+df1[1, 1]= 0 #... et en 0
+```
+
+```{r}
+write.csv(df1, "mon.csv") #on exporte notre dataframe en fichier csv
+```
+
+On fusionne nos deux jeu de données
+```{r}
+vfusion_df <- cbind(df1, df2) #verticalement
+hfusion_df <- rbind(df1, df2) #horizontalement
+head(5)
+```
+
+On transforme notre tableau de df1 et df2 en une seule colonne
+```{r}
+df_rass <- vfusion_df %>% pivot_longer( cols=everything(), names_to='x',
+                    values_to='valeurs') 
+head(5)
+```
+
+Dans notre jeu de données df1 on décale les valeurs d'une colone d'une ligne vers le bas
+```{r}
+df3 <- lag(df1, n=1)
+```
+
+Exercice sur Une approche géographique des taux de complétion en France
+
+On importe le jeu de données des formations engagées
+```{r}
+formation_engage <- read.csv("C:/Users/annas/Documents/R/Data/moncompteformation_formations_engagees.csv", sep=";")
+head(formation_engage)
+rownames(formation_engage) <- NULL
+```
+
+On examine si notre jeu de données a des doublons
+```{r}
+doublons <- duplicated(formation_engage)
+sum(doublons==TRUE)
+```
+
+On calcule la proportion de personnes inscrites qui terminent effectivement la formation, en fonction du département.
+```{r}
+completion_par_dep <- formation_engage %>%
+  group_by(statut_dossier, departement_lieu_formation)%>%
+  count()
+head(completion_par_dep)
+summary(completion_par_dep)
+```
+
+On créé une nouvelle variable avec mutate () calculant le nombre de dossiers par prix_moyen et on evalue si elle est égale à la variable existante montant_engage
+```{r}
+formation_engage %>%
+  mutate(prixmoy_doss = formation_engage$nb_dossiers * formation_engage$prix_moyen)
+comp = with(formation_engage, prixmoy_doss == montant_engage)
+sum(comp)
+
+```
+
+On remplace toutes les occurrences du motif ”Yoga” par ”Cours de yoga” avec gsub()
+```{r}
+formation_engage$libelle_formacode_principal <- gsub("Yoga", "Cours de Yoga", formation_engage$libelle_formacode_principal)
+
+```
+
+On crée la table dep_money qui calcule la somme de la variable montant_engage en fonction de tous les départements grâce à la fonction groupby()
+```{r}
+dep_money <- formation_engage %>%
+  group_by(departement_lieu_formation) %>%
+  summarize(somme_montantengage = sum(montant_engage, na.rm = TRUE))
+
+dep_money %>%  filter(departement_lieu_formation == "Paris") #on filtre montant_departement pour ne conserver que Paris
+
+rownames(dep_money) <- NULL #Utilisez la méthode reset_index() pour en faire un dataframe
+names(dep_money) <- c("Département", "Somme") #on renomme les colonnes de manière pertinente
+
+```
+
+
+On fait un décompte des sessions de formation par région en 2022 avec grepl() qui va séléctionner dans notre colonne de date toutes celles qui commence par 2022 et on calcule le montant total d'argent depensé par région avec group.by
+```{r}
+train_reg <- formation_engage [grepl("^2022", formation_engage$date.validation), ] 
+
+montant_region <- data.frame(
+  region = train_reg$region_lieu_formation,
+  somme_region = train_reg$montant_engage
+)
+
+resultat <- montant_region %>%
+  group_by(region) %>%
+  summarize(somme = sum(somme_region, na.rm = TRUE))
+```
+
+On charge notre fichier csv de la taille de la population de la région 
+```{r}
+readLines("C:/Users/annas/Documents/R/Data/fr_population.region.csv")
+pop_df <- read.csv("C:/Users/annas/Documents/R/Data/fr_population.region.csv", sep=";", fileEncoding = "ISO-8859-1")
+
+```
+
+On fusionne dans notre variable count_habitant la colonne région de notre df sur taille de population par région et celui sur le montant total d'argent depensé par région. Ici on utilise la fonction merge() car on met en relation deux colonnes, on avait perdue un région dans le processus car elle n'était pas écrit de la même manière dans les deux dataframes, pour pallier à ça on a corrigé le nom de la région dans notre fichier csv.
+```{r}
+count_habitant <- merge(resultat, pop_df, by.x ="region", by.y = "Région")
+
+#on calcule le montant d'argent par habitant pour chaque région, on utilise gsub pour que 
+count_habitant %>%
+    mutate(argent_par_hab = as.numeric(gsub("[^0-9]", "", somme))/ as.numeric(gsub("[^0-9]", "", habitants)))
+
+```
+
+On revient au jeu de données d’origine ”Fondations engagées” et on va supprimer les données où statut_dossier n'est pas "Clos" avec la fonction grepl() qui va selectionner uniquement les cellules dans la colonne statut_dossier qui commence par "Clos"
+```{r}
+statut_dossier_clos <- formation_engage[grepl("^Clos", formation_engage$statut_dossier),] 
+#On selectionne d'abord avec la fonction grepl() tous les statuts "Clos - réalisation totale" et on calcule son nombre d'occurences par département avec la fonction group.by()
+
+
+statut_clos_totale <- statut_dossier_clos[grepl("Clos - Réalisation Totale", statut_dossier_clos$statut_dossier),]
+
+statut_clos_totale <- statut_clos_totale %>%
+  group_by(departement_lieu_formation) %>%
+  count()
+
+#On calcule le nombre d'occurence par département de l'ensemble des statut "Clos" en réutilisant notre variable statut_dossier_clos
+all_statut_clos <- statut_dossier_clos %>%
+  group_by(departement_lieu_formation) %>%
+  count()
+```
+
+Ensuite on calcule le pourcentage de ”Réalisation totale” par rapport aux quatres autres types de dossier "Clos" en fonction du département pour cela on commence par fusionner dans un même tableau statut_clos_totale et all_statut_clos en fonction des départements et je renomme les noms de mes colonnes modifiées par mon merge avec la fonction rename.
+On utilise la fonction mutate() pour rajouter notre colonne calculée du pourcentage dans notre tableau. On vérifie bien que les données sont traités de manière numérique pour pouvoir calculer le pourcentage.
+
+```{r}
+fusion_statut <- merge(statut_clos_totale, all_statut, by.x="departement_lieu_formation", by.y ="departement_lieu_formation")
+fusion_statut <- fusion_statut %>%
+  rename(
+    statut_clos_totale = n.x,      
+    all_statut_clos = n.y      
+  ) 
+
+fusion_statut <- fusion_statut %>%
+  mutate(pourcentage_clos = round((as.numeric(statut_clos_totale) / as.numeric(all_statut_clos)) * 100,1))
+
+```
+
+
+
+
+
